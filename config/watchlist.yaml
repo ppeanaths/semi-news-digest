@@ -4,5 +4,11 @@ tickers:
   - TSM
   - AVGO
   - ASML
+names:            # optional: company names make news search more accurate
+  NVDA: Nvidia
+  AMD: AMD
+  TSM: TSMC
+  AVGO: Broadcom
+  ASML: ASML
 max_news_per_ticker: 5
 language: Thai   # Thai or English

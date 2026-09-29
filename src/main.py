@@ -1,8 +1,10 @@
-"""Semiconductor news digest: fetch news -> summarize with Claude -> post to Discord."""
+"""Semiconductor news digest: fetch news -> summarize with an LLM -> post to Discord."""
 import os
 import time
 from pathlib import Path
+from urllib.parse import quote_plus
 
+import feedparser
 import requests
 import yaml
 import yfinance as yf
@@ -12,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # gemini (free tier) or claude (paid)
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
 
 
@@ -21,26 +23,67 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def fetch_news(ticker: str, limit: int) -> list[dict]:
-    """Return a list of {title, summary, url} for one ticker."""
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; semi-news-digest/1.0)"}
+
+
+def fetch_google_news(query: str, limit: int) -> list[dict]:
+    """Google News RSS: free, no API key, works from GitHub Actions."""
+    url = (
+        "https://news.google.com/rss/search?q="
+        f"{quote_plus(query + ' when:2d')}&hl=en-US&gl=US&ceid=US:en"
+    )
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.content)
+    except Exception as e:  # never let one source break the whole digest
+        print(f"Google News failed for '{query}': {e}")
+        return []
+    return [
+        {"title": e.get("title", ""), "summary": "", "url": e.get("link", "")}
+        for e in feed.entries[:limit]
+    ]
+
+
+def fetch_yfinance_news(ticker: str, limit: int) -> list[dict]:
+    """Backup source. May return nothing when run from cloud IPs."""
     items = []
-    for n in (yf.Ticker(ticker).news or [])[:limit]:
-        c = n.get("content", n)  # newer yfinance nests fields under "content"
-        url = (c.get("canonicalUrl") or {}).get("url") or c.get("link", "")
-        items.append(
-            {
-                "title": c.get("title", ""),
-                "summary": c.get("summary", "") or "",
-                "url": url,
-            }
-        )
+    try:
+        for n in (yf.Ticker(ticker).news or [])[:limit]:
+            c = n.get("content", n)  # newer yfinance nests fields under "content"
+            url = (c.get("canonicalUrl") or {}).get("url") or c.get("link", "")
+            items.append(
+                {
+                    "title": c.get("title", ""),
+                    "summary": c.get("summary", "") or "",
+                    "url": url,
+                }
+            )
+    except Exception as e:
+        print(f"yfinance failed for {ticker}: {e}")
     return items
+
+
+def fetch_news(ticker: str, limit: int, name: str = "") -> list[dict]:
+    """Return a list of {title, summary, url} for one ticker (deduplicated)."""
+    query = f"{name} {ticker} stock".strip()
+    items = fetch_google_news(query, limit)
+    if len(items) < limit:
+        items += fetch_yfinance_news(ticker, limit)
+    seen, unique = set(), []
+    for i in items:
+        key = i["title"].strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(i)
+    print(f"{ticker}: {len(unique[:limit])} articles")
+    return unique[:limit]
 
 
 def build_prompt(news_by_ticker: dict, language: str) -> str:
     blocks = []
     for ticker, items in news_by_ticker.items():
-        lines = [f"- {i['title']}: {i['summary'][:300]}" for i in items]
+        lines = [f"- {i['title']}" + (f": {i['summary'][:300]}" if i["summary"] else "") for i in items]
         blocks.append(f"## {ticker}\n" + ("\n".join(lines) if lines else "- (no news)"))
     return (
         f"You are a financial news assistant. Write a concise daily digest in {language}.\n"
@@ -56,6 +99,7 @@ def summarize(prompt: str) -> str:
         from anthropic import Anthropic  # pip install anthropic
 
         resp = Anthropic().messages.create(
+            model=CLAUDE_MODEL,
             max_tokens=1200,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -83,7 +127,7 @@ def summarize(prompt: str) -> str:
 
 
 def send_discord(text: str) -> None:
-    webhook = os.environ["DISCORD_WEBHOOK_URL"]
+    webhook = os.environ["DISCORD_WEBHOOK_URL"].strip()
     # Discord limit is 2000 chars per message
     for i in range(0, len(text), 1900):
         r = requests.post(webhook, json={"content": text[i : i + 1900]}, timeout=15)
@@ -92,7 +136,8 @@ def send_discord(text: str) -> None:
 
 def main() -> None:
     cfg = load_config()
-    news = {t: fetch_news(t, cfg["max_news_per_ticker"]) for t in cfg["tickers"]}
+    names = cfg.get("names", {})
+    news = {t: fetch_news(t, cfg["max_news_per_ticker"], names.get(t, "")) for t in cfg["tickers"]}
     digest = summarize(build_prompt(news, cfg.get("language", "English")))
     header = "📰 **Semiconductor Daily Digest**\n\n"
     footer = "\n\n_Not investment advice._"
