@@ -56,7 +56,6 @@ def summarize(prompt: str) -> str:
         from anthropic import Anthropic  # pip install anthropic
 
         resp = Anthropic().messages.create(
-            model=CLAUDE_MODEL,
             max_tokens=1200,
             messages=[{"role": "user", "content": prompt}],
         )
