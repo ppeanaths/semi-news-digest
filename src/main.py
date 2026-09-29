@@ -7,7 +7,6 @@ from urllib.parse import quote_plus
 import feedparser
 import requests
 import yaml
-import yfinance as yf
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,31 +44,10 @@ def fetch_google_news(query: str, limit: int) -> list[dict]:
     ]
 
 
-def fetch_yfinance_news(ticker: str, limit: int) -> list[dict]:
-    """Backup source. May return nothing when run from cloud IPs."""
-    items = []
-    try:
-        for n in (yf.Ticker(ticker).news or [])[:limit]:
-            c = n.get("content", n)  # newer yfinance nests fields under "content"
-            url = (c.get("canonicalUrl") or {}).get("url") or c.get("link", "")
-            items.append(
-                {
-                    "title": c.get("title", ""),
-                    "summary": c.get("summary", "") or "",
-                    "url": url,
-                }
-            )
-    except Exception as e:
-        print(f"yfinance failed for {ticker}: {e}")
-    return items
-
-
 def fetch_news(ticker: str, limit: int, name: str = "") -> list[dict]:
     """Return a list of {title, summary, url} for one ticker (deduplicated)."""
     query = f"{name} {ticker} stock".strip()
     items = fetch_google_news(query, limit)
-    if len(items) < limit:
-        items += fetch_yfinance_news(ticker, limit)
     seen, unique = set(), []
     for i in items:
         key = i["title"].strip().lower()
