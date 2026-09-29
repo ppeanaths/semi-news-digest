@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
-
+# This is a test
 PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # gemini (free tier) or claude (paid)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
