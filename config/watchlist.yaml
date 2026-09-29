@@ -1,0 +1,8 @@
+tickers:
+  - NVDA
+  - AMD
+  - TSM
+  - AVGO
+  - ASML
+max_news_per_ticker: 5
+language: Thai   # Thai or English
