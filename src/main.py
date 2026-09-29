@@ -1,6 +1,6 @@
 """Semiconductor news digest: fetch news -> summarize with Claude -> post to Discord."""
-import time
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -65,6 +65,8 @@ def summarize(prompt: str) -> str:
     # Default: Google Gemini API (free tier, key from Google AI Studio)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     key = os.environ["GEMINI_API_KEY"].strip()
+    if not key.isascii():
+        raise SystemExit("GEMINI_API_KEY has non-English characters. Re-create the secret by pasting the key.")
     for attempt in range(5):
         r = requests.post(
             url,
@@ -73,6 +75,7 @@ def summarize(prompt: str) -> str:
             timeout=60,
         )
         if r.status_code in (429, 500, 503, 504):  # temporary errors: wait and retry
+            print(f"Gemini returned {r.status_code}, retrying ({attempt + 1}/5)...")
             time.sleep(5 * 2**attempt)  # 5, 10, 20, 40, 80 seconds
             continue
         r.raise_for_status()
