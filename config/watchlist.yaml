@@ -1,14 +1,27 @@
 tickers:
+  - QQQI
+  - SCHD
+  - TSM
+  - ASML
+  - LRCX
+  - GOOGL
+  - AAPL
+  - IREN
   - NVDA
   - AMD
-  - TSM
-  - AVGO
-  - ASML
+  - TTWO
+
 names:            # optional: company names make news search more accurate
+  QQQI: QQQI
+  SCHD: SCHD
+  TSM: TSMC
+  ASML: ASML
+  LRCX: Lam Research
+  GOOGL: GOOGLE
+  AAPL: APPLE
+  IREN: Iris Energy
   NVDA: Nvidia
   AMD: AMD
-  TSM: TSMC
-  AVGO: Broadcom
-  ASML: ASML
+  TTWO: Rockstar
 max_news_per_ticker: 5
 language: Thai   # Thai or English
