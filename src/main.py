@@ -1,4 +1,5 @@
 """Semiconductor news digest: fetch news -> summarize with Claude -> post to Discord."""
+import time
 import os
 from pathlib import Path
 
@@ -63,14 +64,20 @@ def summarize(prompt: str) -> str:
 
     # Default: Google Gemini API (free tier, key from Google AI Studio)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    r = requests.post(
-        url,
-        headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]},
-        json={"contents": [{"parts": [{"text": prompt}]}]},
-        timeout=60,
-    )
+    key = os.environ["GEMINI_API_KEY"].strip()
+    for attempt in range(5):
+        r = requests.post(
+            url,
+            headers={"x-goog-api-key": key},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=60,
+        )
+        if r.status_code in (429, 500, 503, 504):  # temporary errors: wait and retry
+            time.sleep(5 * 2**attempt)  # 5, 10, 20, 40, 80 seconds
+            continue
+        r.raise_for_status()
+        return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     r.raise_for_status()
-    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def send_discord(text: str) -> None:
