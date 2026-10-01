@@ -2,7 +2,7 @@ name: Daily Semi News Digest
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 00:00 UTC = 07:00 Thailand time
+    - cron: "7 7 * * *"   # 00:00 UTC = 07:00 Thailand time
   workflow_dispatch:        # lets you run it manually from the Actions tab
 
 jobs:
